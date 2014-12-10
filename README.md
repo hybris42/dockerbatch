@@ -4,6 +4,7 @@ dockerbatch
 HOWTO
 -----
 * Adapt batch_dependencies in Dockerfile
+* Use prepare.sh script as last build step
 * Replace batch.sh with your own batch
 * use BATCH_VOLUMES as list of mountpoints
 * build with :
