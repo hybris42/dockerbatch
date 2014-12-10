@@ -1,0 +1,27 @@
+#! /bin/bash
+
+if [ x$BATCH_VOLUMES != "x" ]; then
+    BATCH_VOLUMES=$(echo $BATCH_VOLUMES | sed 's/\([^ ]*\)/-v \1:\1/g')
+fi
+
+if [ $# -ne 1 ]; then
+    echo "usage: batch image_name"
+    exit 1
+fi
+
+image=$1
+name=$(echo $1 | sed 's/:/_/')
+
+if docker inspect $name > /dev/null 2>&1; then
+    echo "error: previous batch started at "$(docker inspect $name | grep StartedAt | cut -d'"' -f4)" still running or failed"
+    exit -1
+fi
+
+docker run --name $name ${BATCH_VOLUMES} $image
+ret=$?
+
+if [ $ret -eq 0 ]; then
+    docker rm $name > /dev/null
+fi
+
+exit $ret
