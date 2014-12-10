@@ -1,27 +1,60 @@
 #! /bin/bash
 
+# Treat BATCH_VOLUMES environment variable
 if [ x$BATCH_VOLUMES != "x" ]; then
     BATCH_VOLUMES=$(echo $BATCH_VOLUMES | sed 's/\([^ ]*\)/-v \1:\1/g')
 fi
 
-if [ $# -ne 1 ]; then
-    echo "usage: batch image_name"
+# Should at least have an image name as argument
+if [ $# -eq 0 ]; then
+    echo "usage: batch [-r] [-c] image_name [image_name ...]"
+    echo " -r: remove on failure"
+    echo " -c: continue on failure"
     exit 1
 fi
 
-image=$1
-name=$(echo $1 | sed 's/:/_/')
+# Parse options
+remove=0
+continue_on_error=0
+while [ ${1:0:1} = '-' ]; do
+    if [ $1 = "-r" ]; then
+	remove=1
+	shift
+    fi
+    if [ $1 = "-c" ]; then
+	continue_on_error=1
+	shift
+    fi
+done
 
-if docker inspect $name > /dev/null 2>&1; then
-    echo "error: previous batch started at "$(docker inspect $name | grep StartedAt | cut -d'"' -f4)" still running or failed"
-    exit -1
-fi
+while [ $# -ne 0 ]; do
+    image=$1
+    name=$(echo $1 | sed 's/:/_/')
 
-docker run --name $name ${BATCH_VOLUMES} $image
-ret=$?
+    if docker inspect $name > /dev/null 2>&1; then
+	echo -n "error: previous batch started at "
+	echo -n $(docker inspect $name | grep StartedAt | cut -d'"' -f4)
+	echo " still running or failed"
+	# exit if not "-c"
+	if [ $continue_on_error -eq 0 ]; then
+	    exit -1
+	fi
+	shift
+	continue
+    fi
 
-if [ $ret -eq 0 ]; then
-    docker rm $name > /dev/null
-fi
+    docker run --name $name ${BATCH_VOLUMES} $image
+    ret=$?
 
-exit $ret
+    if [ $ret -eq 0 ] || [ $remove -eq 1 ]; then
+	docker rm $name > /dev/null
+    fi
+
+    if [ $ret -ne 0 ] && [ $continue_on_error -eq 0 ]; then
+	echo "$name failed with return:" $ret
+	if [ $continue_on_error -eq 0 ]; then
+	    exit $ret
+	fi
+    fi
+    shift
+done
